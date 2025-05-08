@@ -2,7 +2,8 @@ const express = require("express");
 const path = require("path");
 const bodyParser = require("body-parser");
 const morgan = require("morgan");
-const fs = require("fs").promises;  // Refactored to use promises
+const mongoose = require("mongoose");
+require("dotenv").config(); // To use the .env file for environment variables
 
 const app = express();
 const PORT = 3000;
@@ -17,6 +18,25 @@ app.set("view engine", "ejs");
 
 // Serve static files (like CSS, images, JS files)
 app.use(express.static(path.join(__dirname, "public")));
+
+// MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => {
+    console.log("MongoDB connected successfully");
+  })
+  .catch((err) => {
+    console.error("MongoDB connection failed:", err);
+  });
+
+// Define a schema for the negotiations
+const negotiationSchema = new mongoose.Schema({
+  offer: String,
+  message: String,
+  date: { type: Date, default: Date.now }
+});
+
+// Create a model based on the schema
+const Negotiation = mongoose.model("Negotiation", negotiationSchema);
 
 // Route for the index page (index.ejs)
 app.get("/", (req, res) => {
@@ -42,18 +62,17 @@ app.post("/submit-negotiation", async (req, res) => {
     }
 
     try {
-        // Read the existing negotiations from negotiations.json
-        const data = await fs.readFile("negotiations.json", "utf-8");
-        let negotiations = data ? JSON.parse(data) : [];
+        // Create a new negotiation document and save it to MongoDB
+        const newNegotiation = new Negotiation({
+            offer,
+            message
+        });
 
-        // Add the new negotiation
-        negotiations.push({ offer, message, date: new Date() });
-
-        // Save the updated negotiations to the file
-        await fs.writeFile("negotiations.json", JSON.stringify(negotiations, null, 2));
+        await newNegotiation.save();
         return res.status(200).json({ success: true, message: "Offer submitted successfully!" });
     } catch (err) {
-        return res.status(500).json({ success: false, message: "Error processing the file." });
+        console.error(err);
+        return res.status(500).json({ success: false, message: "Error processing the request." });
     }
 });
 
